@@ -1,6 +1,8 @@
-create table posts(
-  id INT,
-  title VARCHAR(50),
-  body VARCHAR(255),
-  PRIMARY KEY (id)
+create table entries(
+  id          SERIAL PRIMARY KEY,
+  created_at  TIMESTAMP,
+  tags        JSONB,
+  views       INT
+  title       VARCHAR(50),
+  body        TEXT,
 )

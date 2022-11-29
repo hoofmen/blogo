@@ -1,28 +1,33 @@
 package main
 
 import (
-	"log"
+	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
-	"encoding/json"
+	"time"
+
 	"github.com/gorilla/mux"
-	"database/sql"
 	_ "github.com/lib/pq"
 )
 
-type Post struct {
-	Id 		int 		`json:"id"`
-	Title string 	`json:"title"`
-	Body 	string 	`json:"body`
+type Entry struct {
+	Id        int    `json:"id"`
+	Title     string `json:"title"`
+	Body      string `json:"body"`
+	CreatedAt int64  `json:"created_at"`
+	Views     int    `json:"views"`
+	Tags      string `json:"tags"`
 }
 
 const (
 	hostname = "localhost"
-	port = 5455
-	user = "blogo"
+	port     = 5432
+	user     = "blogo"
 	password = "blogo123"
-	dbname = "blogo"
+	dbname   = "blogo"
 )
 
 func setupDB() *sql.DB {
@@ -37,57 +42,57 @@ func setupDB() *sql.DB {
 
 func Home(w http.ResponseWriter, r *http.Request) {
 	db := setupDB()
-	
-	rows, err := db.Query("SELECT * FROM posts")
+
+	rows, err := db.Query("SELECT * FROM entries")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	var posts []Post
+	var entries []Entry
 	for rows.Next() {
 		var id int
 		var title string
 		var body string
+		var createdAt time.Time
+		var views int
+		var tags string
 
-		err = rows.Scan(&id, &title, &body)
+		err = rows.Scan(&id, &createdAt, &tags, &views, &title, &body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		posts = append(posts, Post{Id: id, Title: title, Body: body})
+		entries = append(entries, Entry{Id: id, Title: title, Body: body, CreatedAt: createdAt.Unix(), Views: views, Tags: tags})
 	}
-	json.NewEncoder(w).Encode(posts)
+	json.NewEncoder(w).Encode(entries)
 }
 
-func NewPost(w http.ResponseWriter, r *http.Request) {
+func NewEntry(w http.ResponseWriter, r *http.Request) {
 	db := setupDB()
-	
+
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Println(err)
- 	}
- 	r.Body.Close()
-	post := Post{}
-	json.Unmarshal([]byte(body), &post)
-	log.Println(post)
+	}
+	r.Body.Close()
+	entry := Entry{}
+	json.Unmarshal([]byte(body), &entry)
+	log.Println(entry)
 
 	var lastInsertID int
-	err = db.QueryRow("INSERT INTO posts(id, title, body) VALUES($1, $2, $3) returning id;", post.Id, post.Title, post.Body).Scan(&lastInsertID)
+	err = db.QueryRow("INSERT INTO entries(title, body, created_at, views, tags) VALUES($1, $2, $3, $4, $5) returning id;", entry.Title, entry.Body, time.Now(), entry.Views, entry.Tags).Scan(&lastInsertID)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
-	}	
+	}
 }
 
 func main() {
 	router := mux.NewRouter()
 	router.HandleFunc("/", Home).Methods("GET")
-	router.HandleFunc("/post", NewPost).Methods("POST")
+	router.HandleFunc("/entry", NewEntry).Methods("POST")
 	log.Fatal(http.ListenAndServe(":8080", router))
-	log.Println("Server running...")
 }
-
-
